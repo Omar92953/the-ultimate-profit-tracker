@@ -1,0 +1,29 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr));
+  gap: 12px;
+}
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 0 rgba(26, 26, 26, 0.07), 0 0 0 1px rgba(26, 26, 26, 0.08);
+  min-width: 0;
+}
+.label {
+  font-size: 12px;
+  font-weight: 550;
+  color: #616161;
+  text-decoration: underline dotted #b5b5b5;
+  text-underline-offset: 3px;
+  width: fit-content;
+}
+.row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.value { font-size: 20px; font-weight: 650; color: #303030; letter-spacing: -0.2px; }
+.change { font-size: 12px; font-weight: 550; }
+.up { color: #047b5d; }
+.down { color: #b42318; }
+.spark { margin-top: 2px; }

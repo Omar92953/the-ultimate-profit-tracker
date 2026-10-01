@@ -1,0 +1,368 @@
+// Ultimate Profit Tracker database (Postgres: Supabase in dev and production).
+// Money columns ending in "Cents" are amount × 100 in the shop's currency unless noted.
+// No customer names, emails, phones or street addresses are stored: only the shipping zone
+// fields (country, province, city, zip) and a one-way hash of the customer id.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model Shop {
+  id            String    @id // myshopify domain
+  name          String?
+  currency      String    @default("USD")
+  timezone      String    @default("UTC") // IANA, e.g. Africa/Cairo
+  moneyFormat   String?
+  settings      Json      @default("{}") // see app/lib/settings.ts
+  importStatus  String    @default("idle") // idle | running | done | failed
+  importKind    String? // orders | catalog
+  importBulkId  String?
+  importError   String?
+  importedAt    DateTime?
+  historyFrom   DateTime? // oldest order Shopify let us read
+  installedAt   DateTime  @default(now())
+  uninstalledAt DateTime?
+}
+
+model Product {
+  shop        String
+  id          BigInt
+  title       String
+  vendor      String?
+  productType String?
+  tags        String[]
+  collections BigInt[]
+  updatedAt   DateTime @updatedAt
+
+  @@id([shop, id])
+}
+
+model Variant {
+  shop            String
+  id              BigInt
+  productId       BigInt
+  title           String?
+  sku             String?
+  inventoryItemId BigInt?
+  shopifyCostCents Int? // inventoryItem.unitCost, as Shopify has it now
+  weightGrams     Int?
+  updatedAt       DateTime @updatedAt
+
+  @@id([shop, id])
+  @@index([shop, inventoryItemId])
+}
+
+/// Cost per unit over time. The cost of a sale is the row in effect when the order was placed,
+/// so editing a cost today never rewrites past profit (unless the merchant backdates it).
+model VariantCost {
+  id            String   @id @default(cuid())
+  shop          String
+  variantId     BigInt
+  costCents     Int
+  effectiveFrom DateTime
+  source        String // shopify | manual | csv
+  createdAt     DateTime @default(now())
+
+  @@index([shop, variantId, effectiveFrom])
+}
+
+model Order {
+  shop                String
+  id                  BigInt
+  name                String
+  createdAt           DateTime
+  processedAt         DateTime
+  day                 DateTime  @db.Date // processedAt in the shop's timezone
+  test                Boolean   @default(false)
+  cancelledAt         DateTime?
+  cancelReason        String?
+  financialStatus     String?
+  fulfillmentStatus   String?
+  returnStatus        String?
+  outcome             String // open | delivered | returned | cancelled
+  channel             String?
+  gateways            String[]
+  isCod               Boolean   @default(false)
+  countryCode         String?
+  province            String?
+  provinceCode        String?
+  city                String?
+  zip                 String?
+  zoneId              String?
+  carrier             String?
+  weightGrams         Int       @default(0)
+  itemCount           Int       @default(0)
+  customerHash        String?
+  customerOrderIndex  Int?
+
+  grossSalesCents      Int @default(0) // line price × qty, before discounts
+  discountsCents       Int @default(0)
+  returnsCents         Int @default(0) // refunded line value
+  shippingChargedCents Int @default(0)
+  shippingRefundCents  Int @default(0)
+  taxesCents           Int @default(0)
+  totalCents           Int @default(0)
+  refundedCents        Int @default(0) // all money refunded
+  shopifyFeesCents     Int? // real gateway fees when Shopify reports them
+
+  utmSource    String?
+  utmMedium    String?
+  utmCampaign  String?
+  utmContent   String?
+  utmTerm      String?
+  landingPage  String?
+  referrer     String?
+  fbclid       String?
+  gclid        String?
+  ttclid       String?
+  adPlatform   String? // meta | google | tiktok
+  adCampaignId String?
+  adSetId      String?
+  adId         String?
+  attribution  String? // utm | click_id | none
+
+  revenueCents  Int       @default(0)
+  cogsCents     Int       @default(0)
+  shippingCents Int       @default(0)
+  feesCents     Int       @default(0)
+  adCents       Int       @default(0)
+  otherCents    Int       @default(0)
+  profitCents   Int       @default(0)
+  missingCost   Boolean   @default(false) // a line had no known COGS
+  computedAt    DateTime?
+  updatedAt     DateTime  @updatedAt
+
+  lines OrderLine[]
+  costs OrderCost[]
+
+  @@id([shop, id])
+  @@index([shop, day])
+  @@index([shop, zoneId])
+  @@index([shop, adPlatform, day])
+}
+
+model OrderLine {
+  shop             String
+  id               BigInt
+  orderId          BigInt
+  productId        BigInt?
+  variantId        BigInt?
+  title            String
+  variantTitle     String?
+  sku              String?
+  quantity         Int
+  refundedQty      Int     @default(0)
+  restockedQty     Int     @default(0)
+  unitPriceCents   Int
+  discountCents    Int     @default(0)
+  unitCostCents    Int? // snapshot from VariantCost at order time
+  weightGrams      Int?
+
+  order Order @relation(fields: [shop, orderId], references: [shop, id], onDelete: Cascade)
+
+  @@id([shop, id])
+  @@index([shop, orderId])
+  @@index([shop, variantId])
+}
+
+/// One row per cost on an order: the "how was this calculated" breakdown.
+model OrderCost {
+  id          String @id @default(cuid())
+  shop        String
+  orderId     BigInt
+  type        String // cogs | shipping | return_shipping | payment_fee | cod_fee | ad | rule
+  label       String
+  amountCents Int
+  source      String // shopify | manual | zone | gateway | meta | google | tiktok | spread | rule
+  refId       String? // rule id, zone id, ad id …
+  note        String?
+
+  order Order @relation(fields: [shop, orderId], references: [shop, id], onDelete: Cascade)
+
+  @@index([shop, orderId])
+  @@index([shop, type])
+}
+
+model ShippingZone {
+  id             String   @id @default(cuid())
+  shop           String
+  key            String // country|province[|city]
+  countryCode    String
+  province       String?
+  city           String?
+  label          String
+  orderCount     Int      @default(0)
+  configured     Boolean  @default(false)
+  deliveryCents  Int? // flat cost per delivered order
+  perItemCents   Int? // extra per item after the first
+  perKgCents     Int? // extra per kg after the first
+  returnCents    Int? // cost when a COD order is refused / returned (on top of delivery)
+  codFeePct      Decimal? @db.Decimal(6, 3)
+  codFeeCents    Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([shop, key])
+}
+
+model AdAccount {
+  id             String    @id @default(cuid())
+  shop           String
+  platform       String // meta | google | tiktok
+  externalId     String
+  name           String?
+  currency       String?
+  accessToken    String? // encrypted (app/lib/crypto.server.ts)
+  refreshToken   String? // encrypted
+  tokenExpiresAt DateTime?
+  status         String    @default("active") // active | error | disconnected
+  lastError      String?
+  lastSyncedAt   DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@unique([shop, platform, externalId])
+}
+
+/// Daily ad-level numbers from each platform. Typed columns for what the app calculates with,
+/// plus every other metric the platform returned in `raw`.
+model AdInsightDaily {
+  id                 String   @id @default(cuid())
+  shop               String
+  platform           String
+  accountId          String
+  date               DateTime @db.Date
+  campaignId         String
+  campaignName       String?
+  adSetId            String?
+  adSetName          String?
+  adId               String
+  adName             String?
+  currency           String
+  spendCents         Int // in the ad account's currency
+  spendShopCents     Int // converted to the shop currency
+  fxRate             Decimal  @db.Decimal(18, 8)
+  impressions        Int      @default(0)
+  clicks             Int      @default(0)
+  purchases          Decimal  @default(0) @db.Decimal(12, 2)
+  purchaseValueCents Int      @default(0)
+  raw                Json
+  updatedAt          DateTime @updatedAt
+
+  @@unique([shop, platform, date, adId])
+  @@index([shop, date])
+}
+
+model CostRule {
+  id         String    @id @default(cuid())
+  shop       String
+  name       String
+  active     Boolean   @default(true)
+  template   String?
+  kind       String // per_order | per_item | pct_revenue | pct_gross_profit | period_amount
+  amount     Decimal   @db.Decimal(14, 4) // cents for money kinds, percent for pct kinds
+  period     String? // daily | weekly | monthly (period_amount only)
+  distribute String? // even | revenue | items (period_amount only)
+  startsOn   DateTime? @db.Date
+  endsOn     DateTime? @db.Date
+  filters    Json      @default("{}") // see app/lib/profit/rules.ts
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([shop])
+}
+
+model FxRate {
+  date  DateTime @db.Date
+  base  String
+  quote String
+  rate  Decimal  @db.Decimal(18, 8)
+
+  @@id([date, base, quote])
+}
+
+model SyncLog {
+  id         String    @id @default(cuid())
+  shop       String
+  kind       String
+  status     String // running | done | failed
+  message    String?
+  stats      Json?
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  @@index([shop, kind, startedAt])
+}
+
+// ---------- Multi-store (agencies, marketers, owners of several stores) ----------
+
+/// A group of stores viewed together. Every shop gets its own workspace on install; linking
+/// another store adds it here. Data stays per shop; the workspace only decides who can see what.
+model Workspace {
+  id            String   @id @default(cuid())
+  ownerShop     String   @unique
+  name          String
+  reportCurrency String  @default("USD")
+  createdAt     DateTime @default(now())
+
+  stores WorkspaceStore[]
+}
+
+model WorkspaceStore {
+  id           String    @id @default(cuid())
+  workspaceId  String
+  shop         String
+  label        String?
+  status       String    @default("active") // active | revoked
+  // "Profit model": what this store earns the workspace owner.
+  //  own            → 100% of the store's net profit
+  //  pct_profit     → share of net profit (e.g. partner owns 30%)
+  //  pct_revenue    → commission on net sales
+  //  pct_ad_spend   → media-buying fee on ad spend
+  //  fixed_monthly  → retainer per month
+  //  per_order      → fee per order
+  // Kinds can be combined (e.g. retainer + 10% of profit) — each entry in `model`.
+  model        Json      @default("[{\"kind\":\"own\"}]")
+  linkedAt     DateTime  @default(now())
+  revokedAt    DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, shop])
+  @@index([shop])
+}
+
+/// One-time code a store owner creates to let another store's workspace see its numbers.
+model LinkCode {
+  code      String    @id
+  shop      String // the store being shared
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  usedAt    DateTime?
+  usedBy    String? // workspace id
+}
