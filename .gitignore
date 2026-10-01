@@ -36,3 +36,6 @@ pnpm-lock.yaml
 
 # lint cache
 .eslintcache
+
+# Private development notes (kept on this Mac, not published)
+CLAUDE.md
