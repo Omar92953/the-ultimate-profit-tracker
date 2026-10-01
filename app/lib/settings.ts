@@ -1,4 +1,6 @@
 /** Per-shop settings, stored as JSON on Shop.settings. Shared by the server and the UI. */
+import type { AdIds } from "./ads/guides";
+
 export type GatewayFee = { gateway: string; pct: number; flatCents: number };
 
 export type ShopSettings = {
@@ -24,6 +26,10 @@ export type ShopSettings = {
   attributionWindowDays: number;
   /** How ad spend reaches orders. */
   adCostModel: "attributed_spread" | "attributed_only" | "blended";
+  /** The merchant's own account ids, so guide links open their logged-in ad accounts. */
+  adIds: AdIds;
+  /** Guide steps the merchant ticked as done. */
+  guideDone: string[];
 };
 
 export const DEFAULT_SETTINGS: ShopSettings = {
@@ -39,6 +45,8 @@ export const DEFAULT_SETTINGS: ShopSettings = {
   gatewayFees: [],
   attributionWindowDays: 7,
   adCostModel: "attributed_spread",
+  adIds: {},
+  guideDone: [],
 };
 
 export function readSettings(raw: unknown): ShopSettings {

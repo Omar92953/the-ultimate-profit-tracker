@@ -8,15 +8,15 @@ import db from "../db.server";
 import { loadRange } from "../lib/range.server";
 import { adsReport } from "../lib/reports.server";
 import { sign } from "../lib/crypto.server";
-import { connectMetaWithToken, metaConfigured, metaRedirectUri, metaStartUrl } from "../lib/ads/meta.server";
+import { metaConfigured, metaRedirectUri, metaStartUrl } from "../lib/ads/meta.server";
+import { connectMetaKey, uploadAdReport } from "../lib/ads/actions.server";
 import { googleAdsScript } from "../lib/ads/google";
-import { detectPlatform, guessMapping, parseCsv, readReport, type Platform } from "../lib/ads/report";
-import { saveAdDays } from "../lib/ads/store.server";
-import { enqueue, enqueueRecompute, QUEUES } from "../lib/jobs.server";
+import { enqueue, QUEUES } from "../lib/jobs.server";
 import { errorMessage } from "../lib/admin.server";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { formatValue } from "../components/charts";
 import { Button, Checkbox, Select, TextField } from "../components/fields";
+import { copyText } from "../components/copy";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -51,11 +51,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const intent = String(form.get("intent"));
   try {
     if (intent === "meta_oauth") return { ok: true, url: metaStartUrl(shop) };
-    if (intent === "meta_token") {
-      const n = await connectMetaWithToken(shop, String(form.get("token") ?? ""));
-      await enqueue(QUEUES.adsSync, { shop });
-      return { ok: true, message: `Connected ${n} ad account(s). Importing your numbers now.` };
-    }
+    if (intent === "meta_token") return await connectMetaKey(shop, String(form.get("token") ?? ""));
     if (intent === "toggle") {
       await db.adAccount.updateMany({ where: { id: String(form.get("id")), shop }, data: { status: form.get("on") === "true" ? "active" : "paused" } });
       return { ok: true, message: "Saved." };
@@ -68,31 +64,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       await db.adAccount.updateMany({ where: { id: String(form.get("id")), shop }, data: { accessToken: null, status: "disconnected" } });
       return { ok: true, message: "Disconnected. Past numbers are kept." };
     }
-    if (intent === "upload") {
-      const shopRow = await db.shop.findUniqueOrThrow({ where: { id: shop } });
-      const table = parseCsv(String(form.get("csv") ?? ""));
-      if (table.length < 2) return { ok: false, message: "The file is empty. Export the report as CSV and try again." };
-      const chosen = String(form.get("platform") ?? "auto");
-      const platform = (chosen !== "auto" ? chosen : detectPlatform(table[0], String(form.get("fileName") ?? ""))) as Platform;
-      const result = readReport(table, guessMapping(table[0]), shopRow.currency);
-      if (result.missing.length) {
-        const names: Record<string, string> = { spend: "amount spent / cost", date: "day (or reporting starts/ends)", ad: "campaign or ad name" };
-        return { ok: false, message: `This report has no ${result.missing.map((m) => names[m] ?? m).join(", ")} column. See the export steps below.` };
-      }
-      const accountId = `upload:${platform}`;
-      await db.adAccount.upsert({
-        where: { shop_platform_externalId: { shop, platform, externalId: accountId } },
-        create: { shop, platform, externalId: accountId, name: "Uploaded reports", status: "active", lastSyncedAt: new Date() },
-        update: { lastSyncedAt: new Date() },
-      });
-      const saved = await saveAdDays(shop, platform, accountId, result.rows, shopRow.currency);
-      if (saved.from && saved.to) await enqueueRecompute(shop, saved.from, saved.to);
-      const spend = result.rows.reduce((s, r) => s + r.spendCents, 0) / 100;
-      return {
-        ok: true,
-        message: `Imported ${saved.saved} ${platform} ad-day rows (${saved.from} → ${saved.to}), ${spend.toFixed(2)} ${result.rows[0]?.currency ?? ""} spend.${result.spreadRows ? " Some rows covered several days and were spread evenly; export by Day for exact daily numbers." : ""}`,
-      };
-    }
+    if (intent === "upload") return await uploadAdReport(shop, String(form.get("csv") ?? ""), String(form.get("fileName") ?? ""), String(form.get("platform") ?? "auto"));
     return { ok: false, message: "Unknown action." };
   } catch (e) {
     return { ok: false, message: errorMessage(e) };
@@ -159,8 +131,11 @@ export default function Ads() {
                 <s-stack gap="small-200">
                   <s-heading>Meta (Facebook & Instagram)</s-heading>
                   <AccountList accounts={byPlatform("meta")} onToggle={toggle} onDisconnect={disconnect} />
-                  <Button variant="primary" commandFor="meta-key">
-                    Connect with an access key
+                  <Button variant="primary" href="/app/ads/connect/meta">
+                    Connect step by step
+                  </Button>
+                  <Button variant="tertiary" commandFor="meta-key">
+                    I already have an access key
                   </Button>
                   {data.meta.oauth ? (
                     <Button variant="tertiary" onClick={() => fetcher.submit({ intent: "meta_oauth" }, { method: "post" })}>
@@ -173,8 +148,8 @@ export default function Ads() {
                 <s-stack gap="small-200">
                   <s-heading>Google Ads</s-heading>
                   <AccountList accounts={byPlatform("google")} onToggle={toggle} onDisconnect={disconnect} />
-                  <Button variant="primary" commandFor="google-script">
-                    Set up daily sync
+                  <Button variant="primary" href="/app/ads/connect/google">
+                    Set up daily sync step by step
                   </Button>
                   <s-text color="subdued">A small script in your Google Ads account sends the numbers every day.</s-text>
                 </s-stack>
@@ -183,7 +158,10 @@ export default function Ads() {
                 <s-stack gap="small-200">
                   <s-heading>TikTok</s-heading>
                   <AccountList accounts={byPlatform("tiktok")} onToggle={toggle} onDisconnect={disconnect} />
-                  <s-text color="subdued">Upload your TikTok Ads report below (by Day, as CSV).</s-text>
+                  <Button variant="primary" href="/app/ads/connect/tiktok">
+                    Connect step by step
+                  </Button>
+                  <s-text color="subdued">Export your TikTok report and upload it; the guide opens the right pages for you.</s-text>
                 </s-stack>
               </s-box>
             </s-grid>
@@ -302,11 +280,9 @@ export default function Ads() {
           <s-stack direction="inline">
             <Button
               icon="clipboard"
-              onClick={() => {
-                navigator.clipboard.writeText(data.googleScript).then(
-                  () => shopify.toast.show("Script copied"),
-                  () => shopify.toast.show("Copy failed: select the text and copy it", { isError: true }),
-                );
+              onClick={async () => {
+                if (await copyText(data.googleScript)) shopify.toast.show("Script copied");
+                else shopify.toast.show("Copy failed: select the text and copy it", { isError: true });
               }}
             >
               Copy script
