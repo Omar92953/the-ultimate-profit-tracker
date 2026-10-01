@@ -30,11 +30,7 @@ export function Kpi(props: {
           </span>
         ) : null}
       </div>
-      {props.points?.length ? (
-        <div className={styles.spark}>
-          <Spark points={props.points} compare={props.comparePoints} />
-        </div>
-      ) : null}
+      <div className={styles.spark}>{props.points?.length ? <Spark points={props.points} compare={props.comparePoints} height={40} /> : null}</div>
     </div>
   );
 }

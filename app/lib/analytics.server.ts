@@ -24,9 +24,17 @@ export type Totals = {
   profit: number;
   adSpend: number;
   missingCostOrders: number;
+  /** Shipping the customers paid (Shopify's "shipping charges"). */
+  shippingCharged: number;
+  taxes: number;
 };
 
 export type Derived = Totals & {
+  /** Shopify's definitions: net sales = gross − discounts − returns; total = net + shipping + taxes. */
+  shopifyNetSales: number;
+  totalSales: number;
+  shippingResult: number;
+  unallocatedAd: number;
   margin: number | null;
   aov: number | null;
   profitPerOrder: number | null;
@@ -56,6 +64,8 @@ export async function totals(shop: string, from: string, to: string, excludeTest
       SUM(o."grossSalesCents") FILTER (WHERE o.outcome <> 'cancelled') AS gross,
       SUM(o."discountsCents") FILTER (WHERE o.outcome <> 'cancelled') AS discounts,
       SUM(o."returnsCents") FILTER (WHERE o.outcome <> 'cancelled') AS returns,
+      SUM(o."shippingChargedCents" - o."shippingRefundCents") FILTER (WHERE o.outcome <> 'cancelled') AS shipping_charged,
+      SUM(o."taxesCents") FILTER (WHERE o.outcome <> 'cancelled') AS taxes,
       SUM(o."cogsCents") AS cogs,
       SUM(o."shippingCents") AS shipping,
       SUM(o."feesCents") AS fees,
@@ -96,6 +106,8 @@ export async function totals(shop: string, from: string, to: string, excludeTest
     profit: money(row.profit),
     adSpend: money(ads?.spend),
     missingCostOrders: n(row.missing),
+    shippingCharged: money(row.shipping_charged),
+    taxes: money(row.taxes),
   };
   return derive(t);
 }
@@ -105,8 +117,13 @@ export function derive(t: Totals): Derived {
   // Ad spend that no order carried (attributed-only model, or days without orders) still costs money.
   const unallocated = Math.max(0, t.adSpend - t.adAllocated);
   const profit = t.profit - unallocated;
+  const shopifyNetSales = t.grossSales - t.discounts - t.returns;
   return {
     ...t,
+    shopifyNetSales,
+    totalSales: shopifyNetSales + t.shippingCharged + t.taxes,
+    shippingResult: t.shippingCharged - t.shipping,
+    unallocatedAd: unallocated,
     profit,
     grossProfit: t.revenue - t.cogs,
     margin: t.revenue ? (profit / t.revenue) * 100 : null,

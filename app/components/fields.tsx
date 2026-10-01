@@ -96,7 +96,7 @@ export function DateField(props: Common & { value: string; onValue: (v: string) 
 }
 
 export function NumberField(
-  props: Common & { value: number; onValue: (v: number) => void; min?: number; max?: number; step?: number; suffix?: string },
+  props: Common & { value: number; onValue: (v: number) => void; min?: number; max?: number; step?: number; suffix?: string; labelAccessibilityVisibility?: "visible" | "exclusive"; placeholder?: string },
 ) {
   const ref = useRef<any>(null);
   useProp(ref, "defaultValue", String(props.value));
@@ -116,6 +116,8 @@ export function NumberField(
       max={props.max}
       step={props.step}
       suffix={props.suffix}
+      placeholder={props.placeholder}
+      labelAccessibilityVisibility={props.labelAccessibilityVisibility}
     />
   );
 }

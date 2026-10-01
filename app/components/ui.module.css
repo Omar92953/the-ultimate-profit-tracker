@@ -1,0 +1,56 @@
+/* Shared layout pieces so every page looks the same. Colours follow the Shopify admin. */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 4px;
+}
+.toolbarNote { font-size: 13px; color: #616161; }
+
+/* Equal-height card grid: every card in a row is as tall as the tallest, actions sit at the bottom. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+@media (max-width: 720px) { .grid { grid-template-columns: repeat(min(var(--cols, 3), 2), minmax(0, 1fr)); } }
+@media (max-width: 560px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 16px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 0 rgba(26, 26, 26, 0.07), 0 0 0 1px rgba(26, 26, 26, 0.08);
+}
+.cardHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cardTitle { margin: 0; font-size: 14px; font-weight: 650; color: #303030; }
+.cardText { margin: 0; font-size: 13px; line-height: 1.45; color: #616161; }
+.cardActions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: auto; padding-top: 4px; }
+
+.groupTitle { margin: 4px 0 8px; font-size: 13px; font-weight: 650; color: #616161; text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* Tabs as links (keeps each tab's URL shareable). */
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; background: #ebebeb; border-radius: 10px; width: fit-content; max-width: 100%; }
+.tab { padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 550; color: #303030; text-decoration: none; white-space: nowrap; }
+.tab:hover { background: rgba(255, 255, 255, 0.6); }
+.tabActive { background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
+
+.pill { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: 550; line-height: 20px; white-space: nowrap; }
+.ok { color: #0c5132; background: #cdfee1; }
+.warn { color: #5e4200; background: #ffef9d; }
+.muted { color: #4a4a4a; background: #ebebeb; }
+
+.checklist { display: flex; flex-direction: column; gap: 6px; }
+.checkRow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 8px; background: #f7f7f7; }
+.checkText { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #303030; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #e2b203; flex: none; }
+.segButton { border: 0; background: transparent; cursor: pointer; font-family: inherit; }
+.segButton.tabActive { background: #fff; }

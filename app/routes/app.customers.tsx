@@ -6,6 +6,7 @@ import { loadRange } from "../lib/range.server";
 import { cohorts, customerSummary } from "../lib/customers.server";
 import { COHORT_WINDOWS, pctChange } from "../lib/metrics";
 import { DateRangePicker } from "../components/DateRangePicker";
+import { Toolbar } from "../components/ui";
 import { BarsChart, formatValue } from "../components/charts";
 import { Kpi, KpiGrid } from "../components/Kpi";
 
@@ -28,7 +29,9 @@ export default function Customers() {
   return (
     <s-page heading="Customers" inlineSize="large">
       <s-stack gap="base">
-        <DateRangePicker range={range} today={today} earliest={earliest} />
+        <Toolbar>
+          <DateRangePicker range={range} today={today} earliest={earliest} />
+        </Toolbar>
         <KpiGrid>
           <Kpi label="CAC" value={now.cac} change={ch("cac")} kind="money" currency={currency} goodWhenDown help="Ad spend ÷ customers who ordered for the first time in this period." />
           <Kpi label="LTV (profit)" value={now.ltvProfit} change={ch("ltvProfit")} kind="money" currency={currency} help="Net profit per customer so far, for customers acquired in this period." />

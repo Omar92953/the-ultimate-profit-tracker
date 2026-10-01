@@ -12,6 +12,7 @@ import { todayIn } from "../lib/dates";
 import { formatMoney, toCents } from "../lib/money";
 import { errorMessage } from "../lib/admin.server";
 import { Button, Checkbox, NumberField, TextArea } from "../components/fields";
+import { COST_HELP, COST_TABS, Explainer, Tabs } from "../components/ui";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -136,16 +137,13 @@ export default function Zones() {
   }, [fetcher.state, fetcher.data, shopify]);
 
   return (
-    <s-page heading="Shipping zones" inlineSize="large">
+    <s-page heading="Costs" inlineSize="large">
       <Button slot="secondary-actions" onClick={() => fetcher.submit({ intent: "refresh" }, { method: "post" })}>
         Find new zones
       </Button>
       <s-stack gap="base">
-        <s-paragraph>
-          Zones are found automatically from your orders. Enter what your courier <s-text type="strong">really</s-text> charges you, not what
-          the customer paid. Every order then gets its own shipping cost. Split a governorate into cities when prices differ inside it.
-        </s-paragraph>
-
+        <Tabs items={COST_TABS} />
+        <Explainer {...COST_HELP.shipping} />
         {unpriced.length ? (
           <s-section heading={`${unpriced.length} zone(s) need a cost`}>
             <s-stack gap="base">

@@ -32,7 +32,6 @@ export default function App() {
         <s-link href={`/app/products${qs}`}>Products</s-link>
         <s-link href={`/app/customers${qs}`}>Customers</s-link>
         <s-link href={`/app/ads${qs}`}>Ads</s-link>
-        <s-link href="/app/zones">Shipping zones</s-link>
         <s-link href="/app/costs">Costs</s-link>
         <s-link href={`/app/reports${qs}`}>Reports</s-link>
         <s-link href="/app/settings">Settings</s-link>

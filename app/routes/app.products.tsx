@@ -5,6 +5,7 @@ import { authenticate } from "../shopify.server";
 import { loadRange } from "../lib/range.server";
 import { products } from "../lib/analytics.server";
 import { DateRangePicker } from "../components/DateRangePicker";
+import { Toolbar } from "../components/ui";
 import { BarsChart, formatValue } from "../components/charts";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -26,7 +27,9 @@ export default function Products() {
   return (
     <s-page heading="Products" inlineSize="large">
       <s-stack gap="base">
-        <DateRangePicker range={range} today={today} earliest={earliest} />
+        <Toolbar>
+          <DateRangePicker range={range} today={today} earliest={earliest} />
+        </Toolbar>
         {top.length ? (
           <s-section heading="Net profit by product (top 10)">
             <BarsChart horizontal kind="money" currency={currency} height={Math.max(160, top.length * 34)} series={[{ name: "Net profit", points: top.map((p) => ({ key: p.title, value: Math.round(p.netProfit) })) }]} />

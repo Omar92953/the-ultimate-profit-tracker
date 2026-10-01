@@ -17,6 +17,7 @@ import { DateRangePicker } from "../components/DateRangePicker";
 import { formatValue } from "../components/charts";
 import { Button, Checkbox, Select, TextField } from "../components/fields";
 import { copyText } from "../components/copy";
+import { Card, CardGrid, CardText, GroupTitle, Pill, Toolbar } from "../components/ui";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -73,12 +74,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 const PLATFORM_NAME: Record<string, string> = { meta: "Meta", google: "Google Ads", tiktok: "TikTok" };
 
-const UTM = [
-  { id: "meta", name: "Meta (Facebook & Instagram)", utm: "utm_source=facebook&utm_medium=paid&utm_campaign={{campaign.id}}&utm_term={{adset.id}}&utm_content={{ad.id}}", where: "Ads Manager → ad → Tracking → URL parameters" },
-  { id: "tiktok", name: "TikTok", utm: "utm_source=tiktok&utm_medium=paid&utm_campaign=__CAMPAIGN_ID__&utm_term=__AID__&utm_content=__CID__", where: "Ad → Destination → URL parameters" },
-  { id: "google", name: "Google Ads", utm: "{lpurl}?utm_source=google&utm_medium=paid&utm_campaign={campaignid}&utm_term={adgroupid}&utm_content={creative}", where: "Account settings → Tracking → Tracking template" },
-];
-
 type Account = ReturnType<typeof useLoaderData<typeof loader>>["accounts"][number];
 
 export default function Ads() {
@@ -121,89 +116,71 @@ export default function Ads() {
   return (
     <s-page heading="Ads" inlineSize="large">
       <s-stack gap="base">
-        <DateRangePicker range={data.range} today={data.today} earliest={data.earliest} />
+        <Toolbar>
+          <DateRangePicker range={data.range} today={data.today} earliest={data.earliest} />
+        </Toolbar>
 
-        <s-section heading="Connect your ad accounts">
-          <s-stack gap="base">
-            <s-paragraph>Connect each platform once. The app can only read your ad numbers; it can&apos;t change your ads.</s-paragraph>
-            <s-grid gridTemplateColumns="repeat(auto-fit, minmax(min(100%, 300px), 1fr))" gap="base">
-              <s-box padding="base" borderWidth="base" borderRadius="base">
-                <s-stack gap="small-200">
-                  <s-heading>Meta (Facebook & Instagram)</s-heading>
-                  <AccountList accounts={byPlatform("meta")} onToggle={toggle} onDisconnect={disconnect} />
-                  <Button variant="primary" href="/app/ads/connect/meta">
-                    Connect step by step
+        <GroupTitle>Ad accounts</GroupTitle>
+        <CardGrid cols={3}>
+          <PlatformCard
+            title="Meta (Facebook & Instagram)"
+            accounts={byPlatform("meta")}
+            text="Automatic: paste a read-only access key from your own Meta Business account. Or upload reports."
+            primary={<Button variant="primary" href="/app/ads/connect/meta">{byPlatform("meta").length ? "Manage" : "Connect"}</Button>}
+            secondary={<Button variant="tertiary" commandFor="meta-key">I have a key</Button>}
+            onToggle={toggle}
+            onDisconnect={disconnect}
+          />
+          <PlatformCard
+            title="Google Ads"
+            accounts={byPlatform("google")}
+            text="Automatic: a small script in your Google Ads account sends your numbers every day."
+            primary={<Button variant="primary" href="/app/ads/connect/google">{byPlatform("google").length ? "Manage" : "Connect"}</Button>}
+            onToggle={toggle}
+            onDisconnect={disconnect}
+          />
+          <PlatformCard
+            title="TikTok"
+            accounts={byPlatform("tiktok")}
+            text="Export your TikTok Ads report and upload it. The guide opens the right pages for you."
+            primary={<Button variant="primary" href="/app/ads/connect/tiktok">{byPlatform("tiktok").length ? "Manage" : "Connect"}</Button>}
+            onToggle={toggle}
+            onDisconnect={disconnect}
+          />
+        </CardGrid>
+
+        <CardGrid cols={2}>
+          <Card
+            title="Upload an ad report"
+            badge={<Pill>Any platform</Pill>}
+            actions={
+              <>
+                <Select label="Platform" labelAccessibilityVisibility="exclusive" value={platform} onValue={setPlatform} options={[{ value: "auto", label: "Detect platform" }, { value: "meta", label: "Meta" }, { value: "tiktok", label: "TikTok" }, { value: "google", label: "Google Ads" }]} />
+                <input aria-label="Ad report CSV file" type="file" accept=".csv,text/csv" onChange={(e) => upload(e.currentTarget.files?.[0])} />
+              </>
+            }
+          >
+            <CardText>Export the report by Day as CSV and choose it here. Uploading the same days again replaces them, never doubles them.</CardText>
+          </Card>
+          <Card
+            title="Orders matched to their ad"
+            badge={<Pill tone={data.total && data.matched / data.total > 0.5 ? "ok" : "warn"}>{`${data.matched} of ${data.total}`}</Pill>}
+            actions={
+              <>
+                {data.accounts.some((a) => a.viaKey) ? (
+                  <Button onClick={() => fetcher.submit({ intent: "sync" }, { method: "post" })} icon="refresh">
+                    Sync now
                   </Button>
-                  <Button variant="tertiary" commandFor="meta-key">
-                    I already have an access key
-                  </Button>
-                  {data.meta.oauth ? (
-                    <Button variant="tertiary" onClick={() => fetcher.submit({ intent: "meta_oauth" }, { method: "post" })}>
-                      Connect with Facebook (beta)
-                    </Button>
-                  ) : null}
-                </s-stack>
-              </s-box>
-              <s-box padding="base" borderWidth="base" borderRadius="base">
-                <s-stack gap="small-200">
-                  <s-heading>Google Ads</s-heading>
-                  <AccountList accounts={byPlatform("google")} onToggle={toggle} onDisconnect={disconnect} />
-                  <Button variant="primary" href="/app/ads/connect/google">
-                    Set up daily sync step by step
-                  </Button>
-                  <s-text color="subdued">A small script in your Google Ads account sends the numbers every day.</s-text>
-                </s-stack>
-              </s-box>
-              <s-box padding="base" borderWidth="base" borderRadius="base">
-                <s-stack gap="small-200">
-                  <s-heading>TikTok</s-heading>
-                  <AccountList accounts={byPlatform("tiktok")} onToggle={toggle} onDisconnect={disconnect} />
-                  <Button variant="primary" href="/app/ads/connect/tiktok">
-                    Connect step by step
-                  </Button>
-                  <s-text color="subdued">Export your TikTok report and upload it; the guide opens the right pages for you.</s-text>
-                </s-stack>
-              </s-box>
-            </s-grid>
-            {data.accounts.some((a) => a.viaKey) ? (
-              <s-stack direction="inline">
-                <Button onClick={() => fetcher.submit({ intent: "sync" }, { method: "post" })} icon="refresh">
-                  Sync now
+                ) : null}
+                <Button variant="tertiary" href="/app/ads/connect/meta">
+                  Set up URL parameters
                 </Button>
-              </s-stack>
-            ) : null}
-          </s-stack>
-        </s-section>
-
-        <s-section heading="Upload an ad report">
-          <s-stack gap="base">
-            <s-paragraph>Works for Meta, TikTok and Google, with no connection needed. Uploading the same days again replaces them.</s-paragraph>
-            <s-stack direction="inline" gap="base" alignItems="end">
-              <Select label="Platform" value={platform} onValue={setPlatform} options={[{ value: "auto", label: "Detect automatically" }, { value: "meta", label: "Meta" }, { value: "tiktok", label: "TikTok" }, { value: "google", label: "Google Ads" }]} />
-              <input aria-label="Ad report CSV file" type="file" accept=".csv,text/csv" onChange={(e) => upload(e.currentTarget.files?.[0])} />
-            </s-stack>
-            <s-unordered-list>
-              <s-list-item>Meta: Ads Manager → Ads tab → Breakdown → By time → Day → Export → CSV.</s-list-item>
-              <s-list-item>TikTok: Ads Manager → Reporting → Custom report → Day + Ad, with Cost, Complete payment and Total complete payment value → Export CSV.</s-list-item>
-              <s-list-item>Google Ads: Ads → Segment → Time → Day → Download → CSV (or use the daily sync).</s-list-item>
-            </s-unordered-list>
-          </s-stack>
-        </s-section>
-
-        <s-section heading={`Orders matched to an ad: ${data.matched} of ${data.total}`}>
-          <s-stack gap="base">
-            <s-paragraph>Paste these into each platform once so every order carries its campaign, ad set and ad.</s-paragraph>
-            {UTM.map((p) => (
-              <s-box key={p.id} padding="small-200" borderWidth="base" borderRadius="base">
-                <s-stack gap="small-300">
-                  <s-text type="strong">{p.name}</s-text>
-                  <s-text color="subdued">{p.where}</s-text>
-                  <code style={{ wordBreak: "break-all", fontSize: 12 }}>{p.utm}</code>
-                </s-stack>
-              </s-box>
-            ))}
-          </s-stack>
-        </s-section>
+              </>
+            }
+          >
+            <CardText>Orders that came from an ad carry that ad&apos;s own cost. Add the URL parameters (last step of each guide) so new orders are matched to their exact ad.</CardText>
+          </Card>
+        </CardGrid>
 
         {data.rows.length ? (
           <s-section heading="Ads" padding="none">
@@ -296,8 +273,35 @@ export default function Ads() {
   );
 }
 
+function PlatformCard(props: {
+  title: string;
+  text: string;
+  accounts: Account[];
+  primary: React.ReactNode;
+  secondary?: React.ReactNode;
+  onToggle: (id: string, on: boolean) => void;
+  onDisconnect: (id: string) => void;
+}) {
+  const connected = props.accounts.some((a) => a.status === "active");
+  const failed = props.accounts.some((a) => a.lastError);
+  return (
+    <Card
+      title={props.title}
+      badge={<Pill tone={failed ? "warn" : connected ? "ok" : "muted"}>{failed ? "Needs attention" : connected ? "Connected" : "Not connected"}</Pill>}
+      actions={
+        <>
+          {props.primary}
+          {props.secondary}
+        </>
+      }
+    >
+      <CardText>{props.text}</CardText>
+      {props.accounts.length ? <AccountList accounts={props.accounts} onToggle={props.onToggle} onDisconnect={props.onDisconnect} /> : null}
+    </Card>
+  );
+}
+
 function AccountList(props: { accounts: Account[]; onToggle: (id: string, on: boolean) => void; onDisconnect: (id: string) => void }) {
-  if (!props.accounts.length) return <s-badge>Not connected</s-badge>;
   return (
     <s-stack gap="small-300">
       {props.accounts.map((a) => (

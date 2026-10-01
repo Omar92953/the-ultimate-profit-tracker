@@ -10,7 +10,9 @@ import { rangeLabel } from "../lib/dates";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { Donut, formatValue, TrendChart } from "../components/charts";
 import { Kpi, KpiGrid } from "../components/Kpi";
-import { Button, Select } from "../components/fields";
+import { Breakdown } from "../components/Breakdown";
+import { Button } from "../components/fields";
+import { Card, CardGrid, CardText, Checklist, GroupTitle, Pill, Segmented, Toolbar } from "../components/ui";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -62,6 +64,7 @@ export default function Dashboard() {
   const pts = (k: keyof (typeof data.points)[number]) => data.points.map((p) => ({ key: p.key, value: Number(p[k]) }));
   const cmp = (k: keyof (typeof data.points)[number]) => data.comparePoints?.map((p) => ({ key: p.key, value: Number(p[k]) })) ?? null;
   const ch = (k: keyof typeof now) => (before ? pctChange(now[k] as number | null, before[k] as number | null) : null);
+  const pointsDelta = (k: "margin" | "returnRate") => (before ? (now[k] ?? 0) - (before[k] ?? 0) : null);
   const setMetric = (v: string) => {
     const q = new URLSearchParams(params);
     q.set("metric", v);
@@ -72,11 +75,10 @@ export default function Dashboard() {
 
   return (
     <s-page heading="Dashboard" inlineSize="large">
-      <s-stack gap="base">
-        <s-stack direction="inline" gap="small-200" alignItems="center">
+      <s-stack gap="large">
+        <Toolbar note={compareLabel ? `compared to ${compareLabel}` : undefined}>
           <DateRangePicker range={data.range} today={data.today} earliest={data.earliest} />
-          {compareLabel ? <s-text color="subdued">compared to {compareLabel}</s-text> : null}
-        </s-stack>
+        </Toolbar>
 
         {importing ? (
           <s-banner tone="info" heading="Importing your store's history">
@@ -86,31 +88,75 @@ export default function Dashboard() {
         ) : null}
         {data.shop.importStatus === "failed" ? (
           <s-banner tone="critical" heading="The import stopped">
-            {data.shop.importError} — open Settings to try again.
+            {data.shop.importError}. Open Settings to try again.
           </s-banner>
         ) : null}
-        <Checklist setup={data.setup} />
+        <Setup setup={data.setup} />
 
-        <KpiGrid>
-          <Kpi label="Net profit" value={now.profit} change={ch("profit")} kind="money" currency={cur} points={pts("profit")} comparePoints={cmp("profit")} help="Net sales minus every cost: products, shipping, fees, ads and your extra costs." />
-          <Kpi label="Net sales" value={now.revenue} change={ch("revenue")} kind="money" currency={cur} points={pts("revenue")} comparePoints={cmp("revenue")} />
-          <Kpi label="Profit margin" value={now.margin} change={before ? (now.margin ?? 0) - (before.margin ?? 0) : null} kind="percent" currency={cur} />
-          <Kpi label="Orders" value={now.orders} change={ch("orders")} kind="number" currency={cur} points={pts("orders")} comparePoints={cmp("orders")} />
-          <Kpi label="Ad spend" value={now.adSpend} change={ch("adSpend")} kind="money" currency={cur} points={pts("adSpend")} comparePoints={cmp("adSpend")} goodWhenDown />
-          <Kpi label="ROAS" value={now.roas} change={ch("roas")} kind="number" currency={cur} help="Net sales ÷ ad spend (blended across platforms)." />
-          <Kpi label="Cost per purchase" value={now.cpa} change={ch("cpa")} kind="money" currency={cur} goodWhenDown help="Ad spend ÷ orders, from your real Shopify orders." />
-          <Kpi label="CAC" value={now.cac} change={ch("cac")} kind="money" currency={cur} goodWhenDown help="Ad spend ÷ new customers." />
-          <Kpi label="Average order value" value={now.aov} change={ch("aov")} kind="money" currency={cur} />
-          <Kpi label="Profit per order" value={now.profitPerOrder} change={ch("profitPerOrder")} kind="money" currency={cur} />
-          <Kpi label="Returned orders" value={now.returnRate} change={before ? (now.returnRate ?? 0) - (before.returnRate ?? 0) : null} kind="percent" currency={cur} goodWhenDown help="Refused or returned (incl. COD) as a share of orders." />
-          <Kpi label="New customers" value={now.newCustomers} change={ch("newCustomers")} kind="number" currency={cur} />
-        </KpiGrid>
+        <div>
+          <GroupTitle>Profit</GroupTitle>
+          <KpiGrid>
+            <Kpi label="Net profit" value={now.profit} change={ch("profit")} kind="money" currency={cur} points={pts("profit")} comparePoints={cmp("profit")} help="Net sales minus every cost: products, shipping, fees, ads and your extra costs." />
+            <Kpi label="Net sales" value={now.revenue} change={ch("revenue")} kind="money" currency={cur} points={pts("revenue")} comparePoints={cmp("revenue")} />
+            <Kpi label="Profit margin" value={now.margin} change={pointsDelta("margin")} kind="percent" currency={cur} />
+            <Kpi label="Profit per order" value={now.profitPerOrder} change={ch("profitPerOrder")} kind="money" currency={cur} />
+          </KpiGrid>
+        </div>
+        <div>
+          <GroupTitle>Orders & customers</GroupTitle>
+          <KpiGrid>
+            <Kpi label="Orders" value={now.orders} change={ch("orders")} kind="number" currency={cur} points={pts("orders")} comparePoints={cmp("orders")} />
+            <Kpi label="Average order value" value={now.aov} change={ch("aov")} kind="money" currency={cur} />
+            <Kpi label="Returned orders" value={now.returnRate} change={pointsDelta("returnRate")} kind="percent" currency={cur} goodWhenDown help="Refused or returned (incl. COD) as a share of orders." />
+            <Kpi label="New customers" value={now.newCustomers} change={ch("newCustomers")} kind="number" currency={cur} />
+          </KpiGrid>
+        </div>
+        <div>
+          <GroupTitle>Ads</GroupTitle>
+          <KpiGrid>
+            <Kpi label="Ad spend" value={now.adSpend} change={ch("adSpend")} kind="money" currency={cur} points={pts("adSpend")} comparePoints={cmp("adSpend")} goodWhenDown />
+            <Kpi label="ROAS" value={now.roas} change={ch("roas")} kind="number" currency={cur} help="Net sales ÷ ad spend (blended across platforms)." />
+            <Kpi label="Cost per purchase" value={now.cpa} change={ch("cpa")} kind="money" currency={cur} goodWhenDown help="Ad spend ÷ orders, from your real Shopify orders." />
+            <Kpi label="CAC" value={now.cac} change={ch("cac")} kind="money" currency={cur} goodWhenDown help="Ad spend ÷ new customers." />
+          </KpiGrid>
+        </div>
+
+        <CardGrid cols={2}>
+          <Card title="Sales, as Shopify reports them" badge={<Pill>Shopify</Pill>}>
+            <Breakdown
+              currency={cur}
+              lines={[
+                { label: "Gross sales", sign: "+", value: now.grossSales, previous: before?.grossSales },
+                { label: "Discounts", sign: "-", value: now.discounts, previous: before?.discounts },
+                { label: "Returns", sign: "-", value: now.returns, previous: before?.returns },
+                { label: "Net sales", sign: "=", value: now.shopifyNetSales, previous: before?.shopifyNetSales },
+                { label: "Shipping charges", sign: "+", value: now.shippingCharged, previous: before?.shippingCharged, hint: "What customers paid for shipping" },
+                { label: "Taxes", sign: "+", value: now.taxes, previous: before?.taxes },
+                { label: "Total sales", sign: "=", value: now.totalSales, previous: before?.totalSales, strong: true },
+              ]}
+            />
+          </Card>
+          <Card title="Profit, with your real costs" badge={<Pill tone="ok">This app</Pill>}>
+            <Breakdown
+              currency={cur}
+              lines={[
+                { label: "Sales counted", sign: "+", value: now.revenue, previous: before?.revenue, hint: "Net sales + shipping charges, minus refused COD orders" },
+                { label: "Product costs", sign: "-", value: now.cogs, previous: before?.cogs },
+                { label: "Real shipping cost", sign: "-", value: now.shipping, previous: before?.shipping, hint: `Your zone prices. Customers paid ${formatValue(now.shippingCharged, "money", cur)}, so shipping ${now.shippingResult >= 0 ? "earned" : "cost"} you ${formatValue(Math.abs(now.shippingResult), "money", cur)}` },
+                { label: "Payment & COD fees", sign: "-", value: now.fees, previous: before?.fees },
+                { label: "Ad spend", sign: "-", value: now.adSpend, previous: before?.adSpend },
+                { label: "Extra costs", sign: "-", value: now.other, previous: before?.other },
+                { label: "Net profit", sign: "=", value: now.profit, previous: before?.profit, strong: true },
+              ]}
+            />
+          </Card>
+        </CardGrid>
 
         <s-section>
           <s-stack gap="base">
-            <s-stack direction="inline" justifyContent="space-between" alignItems="center">
+            <s-stack direction="inline" justifyContent="space-between" alignItems="center" gap="base">
               <s-heading>{metric.label} over time</s-heading>
-              <Select label="Metric" labelAccessibilityVisibility="exclusive" value={metric.value} onValue={setMetric} options={METRICS.map((m) => ({ value: m.value, label: m.label }))} />
+              <Segmented label="Chart metric" value={metric.value} onChange={setMetric} options={METRICS.map((m) => ({ value: m.value, label: m.label }))} />
             </s-stack>
             <TrendChart
               name={rangeLabel(data.range)}
@@ -122,11 +168,12 @@ export default function Dashboard() {
           </s-stack>
         </s-section>
 
-        <s-grid gridTemplateColumns="repeat(auto-fit, minmax(min(100%, 380px), 1fr))" gap="base">
-          <s-section heading="Where the money went">
+        <CardGrid cols={2}>
+          <Card title="Where the money went">
             <Donut
               kind="money"
               currency={cur}
+              height={220}
               slices={[
                 { name: "Product costs", value: now.cogs },
                 { name: "Shipping", value: now.shipping },
@@ -136,74 +183,72 @@ export default function Dashboard() {
                 { name: "Net profit", value: Math.max(0, now.profit) },
               ]}
             />
-          </s-section>
-          <s-section heading="Top products" padding="none">
-            <s-table>
-              <s-table-header-row>
-                <s-table-header listSlot="primary">Product</s-table-header>
-                <s-table-header format="numeric">Units</s-table-header>
-                <s-table-header format="numeric">Gross profit</s-table-header>
-              </s-table-header-row>
-              <s-table-body>
-                {data.topProducts.map((p) => (
-                  <s-table-row key={p.productId}>
-                    <s-table-cell>
-                      {p.title}
-                      {p.missingCost ? <s-badge tone="warning">No cost</s-badge> : null}
-                    </s-table-cell>
-                    <s-table-cell>{p.units}</s-table-cell>
-                    <s-table-cell>{formatValue(p.grossProfit, "money", cur)}</s-table-cell>
-                  </s-table-row>
-                ))}
-              </s-table-body>
-            </s-table>
-          </s-section>
-          <s-section heading="Shipping zones" padding="none">
-            <s-table>
-              <s-table-header-row>
-                <s-table-header listSlot="primary">Zone</s-table-header>
-                <s-table-header format="numeric">Orders</s-table-header>
-                <s-table-header format="numeric">Returned</s-table-header>
-                <s-table-header format="numeric">Profit</s-table-header>
-              </s-table-header-row>
-              <s-table-body>
-                {data.zones.map((z) => (
-                  <s-table-row key={z.zoneId ?? "none"}>
-                    <s-table-cell>{z.label}</s-table-cell>
-                    <s-table-cell>{z.orders}</s-table-cell>
-                    <s-table-cell>{z.orders ? `${Math.round((z.returned / z.orders) * 100)}%` : "–"}</s-table-cell>
-                    <s-table-cell>{formatValue(z.profit, "money", cur)}</s-table-cell>
-                  </s-table-row>
-                ))}
-              </s-table-body>
-            </s-table>
-          </s-section>
-        </s-grid>
+          </Card>
+          <Card title="Top products" actions={<Button variant="tertiary" href="/app/products">View all products</Button>}>
+            <MiniTable
+              head={["Product", "Units", "Gross profit"]}
+              rows={data.topProducts.map((p) => [
+                <>
+                  {p.title} {p.missingCost ? <Pill tone="warn">No cost</Pill> : null}
+                </>,
+                p.units,
+                formatValue(p.grossProfit, "money", cur),
+              ])}
+            />
+          </Card>
+        </CardGrid>
+
+        <Card title="Shipping zones" actions={<Button variant="tertiary" href="/app/zones">Edit shipping costs</Button>}>
+          <MiniTable
+            head={["Zone", "Orders", "Returned", "Profit"]}
+            rows={data.zones.map((z) => [z.label, z.orders, z.orders ? `${Math.round((z.returned / z.orders) * 100)}%` : "–", formatValue(z.profit, "money", cur)])}
+          />
+        </Card>
       </s-stack>
     </s-page>
   );
 }
 
-function Checklist({ setup }: { setup: { unpricedZones: number; missingCostVariants: number; adAccounts: number } }) {
+/** Compact table for cards (keeps card heights tidy). */
+function MiniTable({ head, rows }: { head: string[]; rows: React.ReactNode[][] }) {
+  if (!rows.length) return <CardText>Nothing in this period yet.</CardText>;
+  return (
+    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+      <thead>
+        <tr>
+          {head.map((h, i) => (
+            <th key={h} style={{ textAlign: i ? "right" : "left", color: "#616161", fontWeight: 550, padding: "6px 0", borderBottom: "1px solid #ebebeb" }}>
+              {h}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r, i) => (
+          <tr key={i}>
+            {r.map((c, j) => (
+              <td key={j} style={{ textAlign: j ? "right" : "left", padding: "7px 0", borderBottom: "1px solid #f3f3f3", whiteSpace: j ? "nowrap" : "normal" }}>
+                {c}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function Setup({ setup }: { setup: { unpricedZones: number; missingCostVariants: number; adAccounts: number } }) {
   const items = [
-    setup.unpricedZones > 0 && { text: `${setup.unpricedZones} shipping zone(s) have no real cost yet`, href: "/app/zones", action: "Set costs" },
-    setup.missingCostVariants > 0 && { text: `${setup.missingCostVariants} variant(s) have no product cost`, href: "/app/costs", action: "Add costs" },
-    setup.adAccounts === 0 && { text: "No ad account connected, so ad spend is 0", href: "/app/ads", action: "Connect ads" },
-  ].filter(Boolean) as { text: string; href: string; action: string }[];
+    setup.unpricedZones > 0 && { text: `${setup.unpricedZones} shipping zone(s) have no real cost yet`, action: <Button href="/app/zones" variant="tertiary">Set costs</Button> },
+    setup.missingCostVariants > 0 && { text: `${setup.missingCostVariants} variant(s) have no product cost`, action: <Button href="/app/costs?missing=1" variant="tertiary">Add costs</Button> },
+    setup.adAccounts === 0 && { text: "No ad account connected, so ad spend is 0", action: <Button href="/app/ads" variant="tertiary">Connect ads</Button> },
+  ].filter(Boolean) as { text: string; action: React.ReactNode }[];
   if (!items.length) return null;
   return (
-    <s-banner tone="warning" heading="Finish setup for accurate profit">
-      <s-stack gap="small-200">
-        {items.map((i) => (
-          <s-stack key={i.href} direction="inline" gap="base" alignItems="center">
-            <s-text>{i.text}</s-text>
-            <Button href={i.href} variant="tertiary">
-              {i.action}
-            </Button>
-          </s-stack>
-        ))}
-      </s-stack>
-    </s-banner>
+    <Card title="Finish setup for accurate profit" badge={<Pill tone="warn">{`${items.length} to do`}</Pill>}>
+      <Checklist items={items} />
+    </Card>
   );
 }
 
